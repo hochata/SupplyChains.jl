@@ -17,6 +17,10 @@ function check_eq(mess, e0, es...)
     end
 end
 
+"""
+Each algorithm variation is represented by a different particle struct, as they
+need different data and update functions.
+"""
 abstract type Particles{T <: Real} end
 
 eltype(::Type{<:Particles{T}}) where {T} = T
@@ -24,6 +28,7 @@ eltype(::Type{<:Particles{T}}) where {T} = T
 particles_cost(particles::T, obj_fn) where T <: Particles =
     mapslices(obj_fn, particles.pos, dims=1)
 
+"Fallback move"
 move!(p::T, best, α, β) where T <: Particles = move!(
     p,
     best,
@@ -32,6 +37,7 @@ move!(p::T, best, α, β) where T <: Particles = move!(
     rand(0:0.01:1, size(p.pos)) .- 0.5
 )
 
+"Fallback update"
 function update_ranks!(p::T, prev_cost, costs, curr_best) where T <: Particles
     (best_pos, best_cost) = curr_best
     for i in axes(p.pos, 1)
@@ -62,6 +68,7 @@ function acc_move(p, best, α, β, ϵ)
     (1 - β) .* p + b + r
 end
 
+"Move for accelerated particles"
 function move!(p::AccParticles{T}, best, α, β, ϵ) where T <: Real
     for i in axes(p.pos, 2)
         p.pos[:, i] = acc_move(p.pos[:, i], best, α, β, ϵ[:, i])
@@ -69,6 +76,7 @@ function move!(p::AccParticles{T}, best, α, β, ϵ) where T <: Real
     p
 end
 
+"Update for accelerated particles"
 function update_ranks!(p::AccParticles{T}, _, costs, curr_best) where T <: Real
     (best_pos, best_cost) = curr_best
     for i in axes(p.pos, 2)
@@ -80,6 +88,7 @@ function update_ranks!(p::AccParticles{T}, _, costs, curr_best) where T <: Real
     (best_pos, best_cost)
 end
 
+"Bool particles"
 mutable struct BoolParticles <: Particles{Bool}
     pos
     vel
@@ -104,6 +113,7 @@ sigmoid(x) = 1 / (1 + ℯ^(-x))
 
 rnd_swap(p) = rand() < p
 
+"Move a bool particle"
 function move!(p::BoolParticles, best, α, β, ϵ)
     for i in axes(p.pos, 2)
         (n_pos, n_vel) = bool_move(
@@ -141,6 +151,7 @@ mutable struct Swarm
     end
 end
 
+"Create a new swarm"
 function Swarm(dims::Integer, cost; num_particles=10, type=apso, range=0:0.1:1, α=0.2, β=0.5, kwargs...)
     particles =
         if type == apso
@@ -157,11 +168,13 @@ function Swarm(dims::Integer, cost; num_particles=10, type=apso, range=0:0.1:1, 
             )
 end
 
+"Builting particle types"
 @enum ParticleType begin
     apso
     bpso
 end
 
+"Step a swarm optimization"
 function step!(swarm)
     move!(swarm.particles, swarm.best[1], swarm.α, swarm.β)
 
@@ -176,6 +189,7 @@ function step!(swarm)
     swarm.best
 end
 
+"PSO"
 function pso(cost, dims; steps=20, kwargs...)
     swarm = Swarm(dims, cost, kwargs...)
     for i in 1:steps

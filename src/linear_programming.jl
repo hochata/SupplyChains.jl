@@ -1,10 +1,17 @@
+"Convert supply chains into linear programming problems"
 module LP
 
-using JuMP
 using HiGHS
+using JuMP
 
 export optimal_load
 
+"""
+Use linear programming to optimize  for the open locations given in
+the position vector.
+
+Returns a chain flow with the optimal load.
+"""
 function optimal_load(chain, pos; optimizer = HiGHS.Optimizer)
     s = size(chain)
     caps = chain.capacities

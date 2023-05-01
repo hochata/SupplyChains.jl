@@ -1,19 +1,6 @@
 """
-Logistics in a system are the mechanisms for satisfying demands, such are raw
-materials or time, under certain restrictions, usually a budget, while
-optimizing a cost.
-
-In an industrial environment, the losgistics are the supply chain. It usually
-has two stages: a production chain and a distribution chain.
-
-In this toy example, the production chain has some fixed raw materials suppliers
-and some assembly plants. The distribution chain has some distribution center
-(supplied by the assembly plants) and selling points.
-
-Each installation has a fixed operation cost, and transportation between
-installations has a cost per unit. Suppliers, assembly plants and distribution
-centers have a maximum capacity, and selling points have a demand.
-
+Generic functions to manipulate supply chains. Optimization methods are in
+separate modules.
 """
 module SupplyChains
 
@@ -23,11 +10,6 @@ using LinearAlgebra
 
 export Capacity, Flow, Cost, SupplyChain, size, length
 
-"""
-    check_eq(mess, e1, e2)
-
-Checks if all elements are equal and launch an error with message `mess` if not.
-"""
 function check_eq(mess, e0, es...)
     for (i, e) in enumerate(es)
         if e0 != e
@@ -104,7 +86,6 @@ function active_flow(e, active_plants, active_dists)
     Flow(supl_plants_cost, plants_dist_cost, dist_clients_cost)
 end
 
-"Squash all flow into a giant vector"
 function Base.vec(e::Flow)
     sp = vec(e.supls_plants)
     pd = vec(e.plants_dists)
@@ -197,6 +178,10 @@ function split_pos(s::SupplyChain, pos_vec)
     (pos_vec[1:dims[2]], pos_vec[dims[2]+1:l])
 end
 
+"""
+Given a supply chain and a boolean vector of opened locations, determine if the
+current configuration satisfier the demand without exiding the budgets.
+"""
 function is_feasible(chain, pos_vec)
     active_plants, active_dists = split_pos(chain, pos_vec)
 
@@ -214,6 +199,12 @@ function is_feasible(chain, pos_vec)
     end
 end
 
+include("linear_programming.jl")
+
+"""
+Auxiliary structure to hold the initializations params and store the best
+results as the optimization is taking place.
+"""
 mutable struct ChainParams
     chain
     loads
@@ -230,8 +221,10 @@ mutable struct ChainParams
     end
 end
 
-include("linear_programming.jl")
-
+"""
+Objective cost function. Unfeasible solutions are given a huge cost. Feasible
+solutions are ranked by their regular cost.
+"""
 function penalized_cost(chain, pos, load)
     if is_feasible(chain, pos)
         ap, ad = split_pos(chain, pos)
@@ -245,6 +238,10 @@ include("particle_swarm.jl")
 
 using .ParticleSwarm
 
+"""
+Custome optimization function to apply linear optimization at the end of each
+swarm optimization round.
+"""
 function ParticleSwarm.particles_cost(p::BoolParticles, c::ChainParams)
     if c.use_lp
         c.loads = mapslices(pos -> optimal_load(c.chain, pos), p.pos, dims=1)
@@ -261,6 +258,9 @@ function ParticleSwarm.particles_cost(p::BoolParticles, c::ChainParams)
     new_costs
 end
 
+"""
+Create a swarm optimizer structure for the given supply chain instance.
+"""
 function swarm_optimizer(chain; num_particles=16, use_lp=true)
     dims = size(chain)
     vec_l = dims[2] + dims[3]
@@ -278,6 +278,9 @@ function swarm_optimizer(chain; num_particles=16, use_lp=true)
     Swarm(BoolParticles(map(x -> x, particles)), optim)
 end
 
+"""
+Run a given number of optimization rounds with the given swarm optimizer.
+"""
 function optimize(swarm; steps = 100)
     for i in 1:steps
         ParticleSwarm.step!(swarm)
